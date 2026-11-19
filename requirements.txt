@@ -1,0 +1,11 @@
+
+streamlit
+torch
+transformers==4.49.0
+tokenizers==0.21.1
+timm
+einops
+Pillow
+accelerate
+google-genai
+python-dotenv
