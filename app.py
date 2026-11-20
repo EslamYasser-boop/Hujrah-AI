@@ -1153,11 +1153,11 @@ def run_listing_analysis(client, images, location, florence_results):
 
 
 # =====================================================
-# 7. PDF REPORT  (designed page by page)
+# 7. PDF REPORT  (designed page by page, RTL Arabic)
 # =====================================================
 
 def build_report_pdf(final_report, images):
-    """Draws a designed, multi-section PDF and returns its bytes."""
+    """Draws a designed, multi-section RTL Arabic PDF and returns its bytes."""
 
     from io import BytesIO
     from datetime import datetime
@@ -1166,59 +1166,74 @@ def build_report_pdf(final_report, images):
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import mm
     from reportlab.lib.colors import HexColor
-    from reportlab.lib.utils import ImageReader, simpleSplit
+    from reportlab.lib.utils import ImageReader
     from reportlab.pdfgen import canvas as rl_canvas
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
     from reportlab.pdfbase.pdfmetrics import stringWidth
 
-    # ---------- Fonts (Arabic PDF support) ----------
-    # Readex Pro Arabic fonts are stored in the repository's fonts/ directory.
-    # Windows fonts are kept as a local fallback.
-    reg_candidates = [
-        FONT_DIR / "ReadexPro-Regular.ttf",
-        BASE_DIR / "ReadexPro-Regular.ttf",
-        Path("C:/Windows/Fonts/tahoma.ttf"),
-        Path("C:/Windows/Fonts/arial.ttf"),
-    ]
-    bold_candidates = [
-        FONT_DIR / "ReadexPro-Bold.ttf",
-        FONT_DIR / "ReadexPro-SemiBold.ttf",
-        BASE_DIR / "ReadexPro-Bold.ttf",
-        BASE_DIR / "ReadexPro-SemiBold.ttf",
-        Path("C:/Windows/Fonts/tahomabd.ttf"),
-        Path("C:/Windows/Fonts/arialbd.ttf"),
-    ]
-
-    reg = next((font_path for font_path in reg_candidates if font_path.is_file()), None)
-    bold = next((font_path for font_path in bold_candidates if font_path.is_file()), None)
-
-    if reg is None or bold is None:
-        raise RuntimeError(
-            "ملفات الخط العربي غير موجودة. تأكد من وجود ReadexPro-Regular.ttf "
-            "و ReadexPro-Bold.ttf أو ReadexPro-SemiBold.ttf داخل مجلد fonts."
-        )
-
+    # ---------- Arabic libraries (must be imported BEFORE the font check) ----------
     try:
         import arabic_reshaper
         from bidi.algorithm import get_display
     except ImportError as font_error:
         raise RuntimeError(
             "ثبّت مكتبات دعم العربية في PDF بالأمر: "
-            "python -m pip install arabic-reshaper python-bidi"
+            "python -m pip install arabic-reshaper python-bidi fonttools"
         ) from font_error
 
-    # Embed the selected TrueType fonts in the generated PDF.
+    # ---------- Fonts ----------
+    # arabic_reshaper outputs "Arabic Presentation Forms" (U+FB50-FDFF / U+FE70-FEFF).
+    # The font MUST contain those glyphs, otherwise they render as squares.
+    # Amiri / Noto Naskh Arabic (static TTF) contain them. Readex Pro usually does not.
+    reg_candidates = [
+        FONT_DIR / "Amiri-Regular.ttf",
+        FONT_DIR / "NotoNaskhArabic-Regular.ttf",
+        Path("C:/Windows/Fonts/tahoma.ttf"),
+        Path("C:/Windows/Fonts/arial.ttf"),
+    ]
+    bold_candidates = [
+        FONT_DIR / "Amiri-Bold.ttf",
+        FONT_DIR / "NotoNaskhArabic-Bold.ttf",
+        Path("C:/Windows/Fonts/tahomabd.ttf"),
+        Path("C:/Windows/Fonts/arialbd.ttf"),
+    ]
+
+    # sample covers: ligature lam-alef, hamza, ta marbuta, comma, digits
+    FONT_TEST_TEXT = arabic_reshaper.reshape(
+        "حجرة الشقة تحليل الإيجار مُراجع بالذكاء الاصطناعي ، ؟ 0123456789"
+    )
+
+    def supports_arabic(path):
+        """True only if the font has every glyph the reshaper will output."""
+        try:
+            from fontTools.ttLib import TTFont as FTFont
+            cmap = FTFont(str(path), lazy=True).getBestCmap() or {}
+        except ImportError:
+            return True  # fonttools not installed: skip the check
+        except Exception:
+            return False
+        return all(ord(ch) in cmap for ch in FONT_TEST_TEXT if not ch.isspace())
+
+    reg = next((p for p in reg_candidates if p.is_file() and supports_arabic(p)), None)
+    bold = next((p for p in bold_candidates if p.is_file() and supports_arabic(p)), None)
+
+    if reg is None or bold is None:
+        raise RuntimeError(
+            "لم يتم العثور على خط عربي يدعم Presentation Forms. "
+            "ضع Amiri-Regular.ttf و Amiri-Bold.ttf "
+            "(أو NotoNaskhArabic-Regular.ttf و NotoNaskhArabic-Bold.ttf) داخل مجلد fonts."
+        )
+
     pdfmetrics.registerFont(TTFont("Body", str(reg), validate=1))
     pdfmetrics.registerFont(TTFont("Body-Bold", str(bold), validate=1))
     pdfmetrics.registerFontFamily(
         "Body", normal="Body", bold="Body-Bold",
         italic="Body", boldItalic="Body-Bold"
     )
-    FONT, FONT_BOLD, UNICODE_OK = "Body", "Body-Bold", True
+    FONT, FONT_BOLD = "Body", "Body-Bold"
 
     def has_arabic(value):
-        """Return True when text contains Arabic-script characters."""
         return any(
             ("\u0600" <= ch <= "\u08FF")
             or ("\uFB50" <= ch <= "\uFDFF")
@@ -1227,12 +1242,10 @@ def build_report_pdf(final_report, images):
         )
 
     def shape(value):
-        """Shape Arabic glyphs and apply the Unicode bidirectional algorithm."""
         value = str(value if value is not None else "")
         if not has_arabic(value):
             return value
-        reshaped = arabic_reshaper.reshape(value)
-        return get_display(reshaped, base_dir="R")
+        return get_display(arabic_reshaper.reshape(value), base_dir="R")
 
     # ---------- Palette ----------
     NIGHT = HexColor("#08130F")
@@ -1276,6 +1289,7 @@ def build_report_pdf(final_report, images):
     MARGIN = 18 * mm
     CONTENT_W = PAGE_W - 2 * MARGIN
     BOTTOM = 24 * mm
+    R = PAGE_W - MARGIN          # right edge of the content area (RTL anchor)
 
     info = final_report.get("listing_information", {})
     est = final_report.get("listing_estimate", {})
@@ -1322,6 +1336,13 @@ def build_report_pdf(final_report, images):
         else:
             c.drawString(x, y, value)
 
+    def fit_size(value, font, size, max_w, min_size=7.0):
+        """Shrinks the font size until the shaped text fits in max_w."""
+        shaped = shape(value)
+        while size > min_size and stringWidth(shaped, font, size) > max_w:
+            size -= 0.5
+        return size
+
     def spaced(x_center, y, value, size, color, spacing=3):
 
         raw_value = str(value if value is not None else "")
@@ -1340,12 +1361,27 @@ def build_report_pdf(final_report, images):
         c.drawText(t)
 
     def wrap(value, font, size, width):
-        """Wrap logical text first, then shape each line for Arabic display."""
-        logical_text = str(value if value is not None else "")
-        if not logical_text.strip():
+        """Wraps by measuring the SHAPED width (connected letters have
+        different widths than isolated ones), then returns shaped lines."""
+
+        words = str(value if value is not None else "").split()
+        if not words:
             return []
-        logical_lines = simpleSplit(logical_text, font, size, width)
-        return [shape(line) for line in logical_lines]
+
+        lines, cur = [], ""
+
+        for word in words:
+            test = (cur + " " + word).strip()
+            if stringWidth(shape(test), font, size) <= width or not cur:
+                cur = test
+            else:
+                lines.append(cur)
+                cur = word
+
+        if cur:
+            lines.append(cur)
+
+        return [shape(line) for line in lines]
 
     def arch_path(x, y, w, h):
 
@@ -1422,8 +1458,17 @@ def build_report_pdf(final_report, images):
         c.setLineWidth(0.8)
         c.roundRect(x, y_top - h, w, h, 3 * mm, fill=1, stroke=1)
 
-    def chips(x, y_top, max_w, items, fill, border, color,
+    def color_for(item):
+        for word in str(item).lower().replace("-", " ").split():
+            if word in COLOR_MAP:
+                return COLOR_MAP[word]
+            if word.startswith("ال") and word[2:] in COLOR_MAP:
+                return COLOR_MAP[word[2:]]
+        return None
+
+    def chips(x_right, y_top, max_w, items, fill, border, color,
               swatch=False, draw=True, size=8.5):
+        """RTL chip flow: starts at x_right and moves to the left."""
 
         if not items:
             return 0
@@ -1431,7 +1476,8 @@ def build_report_pdf(final_report, images):
         row_h = 6.4 * mm
         gap = 1.8 * mm
         pad = 2.6 * mm
-        cx, cy = x, y_top
+        cx, cy = x_right, y_top          # cx = right edge of the next chip
+        left_limit = x_right - max_w
 
         for item in items:
 
@@ -1439,33 +1485,29 @@ def build_report_pdf(final_report, images):
             extra = 4 * mm if swatch else 0
             w = stringWidth(label, FONT, size) + 2 * pad + extra
 
-            if cx + w > x + max_w and cx > x:
-                cx = x
+            if cx - w < left_limit and cx < x_right:
+                cx = x_right
                 cy -= row_h + gap
 
             if draw:
                 c.setFillColor(fill)
                 c.setStrokeColor(border)
                 c.setLineWidth(0.6)
-                c.roundRect(cx, cy - row_h, w, row_h, row_h / 2, fill=1, stroke=1)
+                c.roundRect(cx - w, cy - row_h, w, row_h, row_h / 2, fill=1, stroke=1)
 
-                tx = cx + pad
+                tx = cx - pad
 
                 if swatch:
-                    hex_color = None
-                    for word in str(item).lower().replace("-", " ").split():
-                        if word in COLOR_MAP:
-                            hex_color = COLOR_MAP[word]
-                            break
+                    hex_color = color_for(item)
                     if hex_color:
                         c.setFillColor(HexColor(hex_color))
                         c.setStrokeColor(LINE)
-                        c.circle(cx + pad + 1.3 * mm, cy - row_h / 2, 1.5 * mm, fill=1, stroke=1)
-                    tx += extra
+                        c.circle(cx - pad - 1.3 * mm, cy - row_h / 2, 1.5 * mm, fill=1, stroke=1)
+                    tx -= extra
 
-                text(tx, cy - row_h + 2.2 * mm, item, FONT, size, color)
+                text(tx, cy - row_h + 2.2 * mm, item, FONT, size, color, align="right")
 
-            cx += w + gap
+            cx -= w + gap
 
         return y_top - (cy - row_h)
 
@@ -1481,19 +1523,18 @@ def build_report_pdf(final_report, images):
         c.setFillColor(GOLD)
         c.rect(0, PAGE_H - 14 * mm - 0.8, PAGE_W, 0.8, fill=1, stroke=0)
 
-        text(MARGIN, PAGE_H - 9 * mm, "حُجرة", FONT_BOLD, 9, GOLD_LIGHT)
-        text(PAGE_W - MARGIN, PAGE_H - 9 * mm, listing_name, FONT, 9,
-             HexColor("#BFD8C8"), align="right")
+        # RTL: brand on the right, listing name on the left
+        text(R, PAGE_H - 9 * mm, "حُجرة", FONT_BOLD, 9, GOLD_LIGHT, align="right")
+        text(MARGIN, PAGE_H - 9 * mm, listing_name, FONT, 9, HexColor("#BFD8C8"))
 
         c.setStrokeColor(LINE)
         c.setLineWidth(0.8)
         c.line(MARGIN, 16 * mm, PAGE_W - MARGIN, 16 * mm)
 
-        text(MARGIN, 11 * mm,
+        text(R, 11 * mm,
              "حُجرة | تحليل بمساعدة الذكاء الاصطناعي. جميع الإعلانات تتطلب موافقة المالك.",
-             FONT, 8, MUTED)
-        text(PAGE_W - MARGIN, 11 * mm, f"{state['page']}", FONT_BOLD, 8,
-             EMERALD_900, align="right")
+             FONT, 8, MUTED, align="right")
+        text(MARGIN, 11 * mm, f"{state['page']}", FONT_BOLD, 8, EMERALD_900)
 
         state["y"] = PAGE_H - 28 * mm
 
@@ -1506,15 +1547,20 @@ def build_report_pdf(final_report, images):
         if state["y"] - h < BOTTOM:
             new_page()
 
-    def section(number, title):
+    def section(number, title, need=22 * mm):
+        """`need` = space to keep free under the title, so a title is never
+        left alone at the bottom of a page."""
 
-        ensure(22 * mm)
+        ensure(need)
 
-        text(MARGIN, state["y"], f"{number:02d}", FONT_BOLD, 9, BRASS)
-        text(MARGIN + 8 * mm, state["y"], title, FONT_BOLD, 15, EMERALD_900)
+        y = state["y"]
+        text(R, y, f"{number:02d}", FONT_BOLD, 9, BRASS, align="right")
+
+        tx = R - 8 * mm
+        text(tx, y, title, FONT_BOLD, 15, EMERALD_900, align="right")
 
         c.setFillColor(BRASS)
-        c.rect(MARGIN + 8 * mm, state["y"] - 2.6 * mm, 12 * mm, 0.9, fill=1, stroke=0)
+        c.rect(tx - 12 * mm, y - 2.6 * mm, 12 * mm, 0.9, fill=1, stroke=0)
 
         state["y"] -= 11 * mm
 
@@ -1524,7 +1570,6 @@ def build_report_pdf(final_report, images):
     c.setFillColor(NIGHT)
     c.rect(0, 0, PAGE_W, PAGE_H, fill=1, stroke=0)
 
-    # soft emerald glow behind the arch
     for i, alpha in enumerate([0.05, 0.07, 0.09, 0.11]):
         c.setFillColor(HexColor("#1F8A68"))
         c.setFillAlpha(alpha)
@@ -1537,7 +1582,6 @@ def build_report_pdf(final_report, images):
     ax = (PAGE_W - arch_w) / 2
     ay = PAGE_H - 28 * mm - arch_h
 
-    # concentric gold arches
     for i, alpha in enumerate([0.55, 0.35, 0.2]):
         d = (i + 1) * 6 * mm
         c.setStrokeColor(GOLD)
@@ -1557,15 +1601,16 @@ def build_report_pdf(final_report, images):
     c.setLineWidth(1.8)
     c.drawPath(arch_path(ax, ay, arch_w, arch_h), fill=0, stroke=1)
 
-    # verified pill
-    pill_w, pill_h = 50 * mm, 8 * mm
+    # verified pill (width follows the text)
+    pill_text = "إعلان مُراجع بالذكاء الاصطناعي"
+    pill_w = max(50 * mm, stringWidth(shape(pill_text), FONT_BOLD, 7.5) + 14 * mm)
+    pill_h = 8 * mm
     px = (PAGE_W - pill_w) / 2
     py = ay - pill_h / 2
     c.setFillColor(GOLD)
     c.roundRect(px, py, pill_w, pill_h, pill_h / 2, fill=1, stroke=0)
-    spaced(PAGE_W / 2, py + 2.7 * mm, "إعلان مُراجع بالذكاء الاصطناعي", 7.5, NIGHT, spacing=1.6)
+    spaced(PAGE_W / 2, py + 2.7 * mm, pill_text, 7.5, NIGHT, spacing=0)
 
-    # title
     title_lines = wrap(listing_name, FONT_BOLD, 28, PAGE_W - 40 * mm)[:2]
     ty = ay - 20 * mm
 
@@ -1583,7 +1628,7 @@ def build_report_pdf(final_report, images):
     c.line(PAGE_W / 2 - 14 * mm, ty - 8 * mm, PAGE_W / 2 + 14 * mm, ty - 8 * mm)
     c.setStrokeAlpha(1)
 
-    # stats strip
+    # stats strip (RTL order: rent on the right, capacity on the left)
     col_w = (PAGE_W - 2 * MARGIN) / 3
     sy = 48 * mm
 
@@ -1593,23 +1638,24 @@ def build_report_pdf(final_report, images):
         c.line(MARGIN + col_w * i, sy - 6 * mm, MARGIN + col_w * i, sy + 12 * mm)
     c.setStrokeAlpha(1)
 
-    cx1 = MARGIN + col_w * 0.5
-    cx2 = MARGIN + col_w * 1.5
-    cx3 = MARGIN + col_w * 2.5
+    cx_rent = MARGIN + col_w * 2.5
+    cx_rate = MARGIN + col_w * 1.5
+    cx_cap = MARGIN + col_w * 0.5
 
-    text(cx1, sy + 5 * mm, rent_text, FONT_BOLD, 13, GOLD_LIGHT, align="center")
-    text(cx1, sy - 3 * mm, "الإيجار الشهري (تقديري)", FONT, 7, MUTED_DARK, align="center")
+    rent_size = fit_size(rent_text, FONT_BOLD, 13, col_w - 10 * mm, min_size=8)
+    text(cx_rent, sy + 5 * mm, rent_text, FONT_BOLD, rent_size, GOLD_LIGHT, align="center")
+    text(cx_rent, sy - 3 * mm, "الإيجار الشهري (تقديري)", FONT, 7, MUTED_DARK, align="center")
 
     star_size = 5 * mm
     star_w = 5 * star_size + 4 * star_size * 0.25
-    draw_stars(cx2 - star_w / 2, sy + 3 * mm, star_size, rating,
+    draw_stars(cx_rate - star_w / 2, sy + 3 * mm, star_size, rating,
                on=GOLD_LIGHT, off=HexColor("#2B3A32"))
-    text(cx2, sy - 3 * mm, f"{rating:.1f} من 5 - تقييم تقديري", FONT, 7,
+    text(cx_rate, sy - 3 * mm, f"{rating:.1f} من 5 - تقييم تقديري", FONT, 7,
          MUTED_DARK, align="center")
 
-    text(cx3, sy + 5 * mm, f"{capacity} {'فرد' if capacity == 1 else 'أفراد'}",
+    text(cx_cap, sy + 5 * mm, f"{capacity} {'فرد' if capacity == 1 else 'أفراد'}",
          FONT_BOLD, 13, GOLD_LIGHT, align="center")
-    text(cx3, sy - 3 * mm, "السعة التقديرية", FONT, 7, MUTED_DARK, align="center")
+    text(cx_cap, sy - 3 * mm, "السعة التقديرية", FONT, 7, MUTED_DARK, align="center")
 
     text(PAGE_W / 2, 18 * mm,
          f"تاريخ إنشاء التقرير: {datetime.now().strftime('%d-%m-%Y')}",
@@ -1626,7 +1672,7 @@ def build_report_pdf(final_report, images):
     body_page()
 
     # ---------- 01 Gallery ----------
-    section(1, "الشقة")
+    section(1, "الشقة", need=22 * mm + 42 * mm)
 
     pics = list(images.items())
     gap = 4 * mm
@@ -1642,7 +1688,8 @@ def build_report_pdf(final_report, images):
 
         for i, (name, data) in enumerate(row):
 
-            x = MARGIN + i * (pw + gap)
+            # RTL: first photo on the right
+            x = R - (i + 1) * pw - i * gap
             draw_photo(data["image"], x, top - ph, pw, ph)
 
             room = per_image.get(name, {}).get("room_type", "") or "صورة"
@@ -1660,45 +1707,45 @@ def build_report_pdf(final_report, images):
     state["y"] -= 2 * mm
 
     # ---------- 02 Description ----------
-    section(2, "عن الشقة")
-
     description = get_verified_description(final_report)
-    lines = wrap(description, FONT, 10.5, CONTENT_W - 14 * mm)
+    lines = wrap(description, FONT, 10.5, CONTENT_W - 16 * mm)
     leading = 5.8 * mm
     box_h = len(lines) * leading + 11 * mm
 
+    section(2, "عن الشقة", need=min(box_h, 60 * mm) + 11 * mm)
     ensure(box_h)
 
     top = state["y"]
     card(MARGIN, top, CONTENT_W, box_h)
 
     c.setFillColor(BRASS)
-    c.roundRect(MARGIN, top - box_h, 1.6 * mm, box_h, 0.8 * mm, fill=1, stroke=0)
+    c.roundRect(R - 1.6 * mm, top - box_h, 1.6 * mm, box_h, 0.8 * mm, fill=1, stroke=0)
 
     ly = top - 8 * mm
 
     for line in lines:
         c.setFont(FONT, 10.5)
         c.setFillColor(INK)
-        c.drawString(MARGIN + 8 * mm, ly, line)
+        c.drawRightString(R - 8 * mm, ly, line)
         ly -= leading
 
     state["y"] = top - box_h - 10 * mm
 
     # ---------- 03 At a glance ----------
-    section(3, "نظرة سريعة")
-
-    ensure(66 * mm)
+    section(3, "نظرة سريعة", need=11 * mm + 34 * mm + 5 * mm + 20 * mm)
 
     top = state["y"]
     cw = (CONTENT_W - 2 * gap) / 3
     ch = 34 * mm
 
-    # Rent
-    x = MARGIN
+    # Rent (rightmost)
+    x = R - cw
+    rx = x + cw - 5 * mm
     card(x, top, cw, ch)
-    text(x + 5 * mm, top - 7 * mm, "الإيجار الشهري", FONT_BOLD, 7, MUTED)
-    text(x + 5 * mm, top - 15 * mm, rent_text, FONT_BOLD, 12.5, EMERALD_600)
+    text(rx, top - 7 * mm, "الإيجار الشهري", FONT_BOLD, 7, MUTED, align="right")
+
+    rent_size2 = fit_size(rent_text, FONT_BOLD, 12.5, cw - 10 * mm, min_size=8)
+    text(rx, top - 15 * mm, rent_text, FONT_BOLD, rent_size2, EMERALD_600, align="right")
 
     bar_x, bar_w, bar_y = x + 5 * mm, cw - 10 * mm, top - 24 * mm
 
@@ -1707,35 +1754,42 @@ def build_report_pdf(final_report, images):
 
     if rent_max > 0:
         scale = rent_max * 1.4
-        lo = bar_x + bar_w * (rent_min / scale)
-        hi = bar_x + bar_w * (rent_max / scale)
+        # mirrored so the range grows from the right (RTL)
+        hi = bar_x + bar_w * (1 - rent_min / scale)
+        lo = bar_x + bar_w * (1 - rent_max / scale)
         c.setFillColor(BRASS)
         c.roundRect(lo, bar_y, max(hi - lo, 2 * mm), 2.4 * mm, 1.2 * mm, fill=1, stroke=0)
 
-    text(x + 5 * mm, top - 30 * mm, "تقدير شهري بالذكاء الاصطناعي", FONT, 7.5, MUTED)
+    text(rx, top - 30 * mm, "تقدير شهري بالذكاء الاصطناعي", FONT, 7.5, MUTED, align="right")
 
-    # Rating
-    x = MARGIN + cw + gap
+    # Rating (middle)
+    x = R - 2 * cw - gap
+    rx = x + cw - 5 * mm
     card(x, top, cw, ch)
-    text(x + 5 * mm, top - 7 * mm, "التقييم", FONT_BOLD, 7, MUTED)
-    text(x + 5 * mm, top - 17 * mm, f"{rating:.1f}", FONT_BOLD, 20, EMERALD_600)
-    text(x + 5 * mm + stringWidth(f"{rating:.1f}", FONT_BOLD, 20) + 1.5 * mm,
-         top - 17 * mm, "/ 5", FONT, 9, MUTED)
-    draw_stars(x + 5 * mm, top - 26 * mm, 5 * mm, rating)
-    text(x + 5 * mm, top - 31.5 * mm, "تقدير اعتمادًا على الصور", FONT, 7.5, MUTED)
+    text(rx, top - 7 * mm, "التقييم", FONT_BOLD, 7, MUTED, align="right")
 
-    # Capacity
-    x = MARGIN + 2 * (cw + gap)
+    num = f"{rating:.1f}"
+    text(rx, top - 17 * mm, num, FONT_BOLD, 20, EMERALD_600, align="right")
+    text(rx - stringWidth(num, FONT_BOLD, 20) - 1.5 * mm,
+         top - 17 * mm, "/ 5", FONT, 9, MUTED, align="right")
+    draw_stars(rx - (5 * 5 * mm + 4 * 5 * mm * 0.25), top - 26 * mm, 5 * mm, rating)
+    text(rx, top - 31.5 * mm, "تقدير اعتمادًا على الصور", FONT, 7.5, MUTED, align="right")
+
+    # Capacity (leftmost)
+    x = R - 3 * cw - 2 * gap
+    rx = x + cw - 5 * mm
     card(x, top, cw, ch)
-    text(x + 5 * mm, top - 7 * mm, "السعة", FONT_BOLD, 7, MUTED)
-    text(x + 5 * mm, top - 17 * mm, str(capacity), FONT_BOLD, 20, EMERALD_600)
-    text(x + 5 * mm + stringWidth(str(capacity), FONT_BOLD, 20) + 1.5 * mm,
-         top - 17 * mm, "أفراد", FONT, 9, MUTED)
+    text(rx, top - 7 * mm, "السعة", FONT_BOLD, 7, MUTED, align="right")
+
+    cap_str = str(capacity)
+    text(rx, top - 17 * mm, cap_str, FONT_BOLD, 20, EMERALD_600, align="right")
+    text(rx - stringWidth(cap_str, FONT_BOLD, 20) - 1.5 * mm,
+         top - 17 * mm, "أفراد", FONT, 9, MUTED, align="right")
 
     shown = min(capacity, 8)
 
     for i in range(shown):
-        ix = x + 7 * mm + i * 5.6 * mm
+        ix = rx - 2 * mm - i * 5.6 * mm
         iy = top - 27 * mm
         c.setFillColor(BRASS)
         c.circle(ix, iy + 3.2 * mm, 1.2 * mm, fill=1, stroke=0)
@@ -1743,49 +1797,51 @@ def build_report_pdf(final_report, images):
                     1.6 * mm, fill=1, stroke=0)
 
     if capacity > 8:
-        text(x + 7 * mm + 8 * 5.6 * mm - 4 * mm, top - 27 * mm, f"+{capacity - 8}",
-             FONT_BOLD, 8, BRASS)
+        text(rx - 2 * mm - 8 * 5.6 * mm, top - 27 * mm, f"+{capacity - 8}",
+             FONT_BOLD, 8, BRASS, align="right")
 
     state["y"] = top - ch - 5 * mm
 
-    # مدى ملاءمة السعة
+    # Capacity fit
     fh = 20 * mm
     ensure(fh)
     top = state["y"]
 
     card(MARGIN, top, CONTENT_W, fh)
-    text(MARGIN + 6 * mm, top - 7.5 * mm,
+    text(R - 6 * mm, top - 7.5 * mm,
          f"مدى ملاءمة السعة لعدد {people} من الأفراد المطلوبين",
-         FONT_BOLD, 7.5, MUTED)
-    text(PAGE_W - MARGIN - 6 * mm, top - 9 * mm, f"{fit}%", FONT_BOLD, 16,
-         EMERALD_600, align="right")
+         FONT_BOLD, 7.5, MUTED, align="right")
+    text(MARGIN + 6 * mm, top - 9 * mm, f"{fit}%", FONT_BOLD, 16, EMERALD_600)
 
     track_w = CONTENT_W - 12 * mm
+    track_x = MARGIN + 6 * mm
+    fill_w = max(track_w * fit / 100, 3 * mm)
+
     c.setFillColor(MINT)
-    c.roundRect(MARGIN + 6 * mm, top - 16 * mm, track_w, 3 * mm, 1.5 * mm, fill=1, stroke=0)
+    c.roundRect(track_x, top - 16 * mm, track_w, 3 * mm, 1.5 * mm, fill=1, stroke=0)
     c.setFillColor(EMERALD_600 if fit >= 100 else BRASS)
-    c.roundRect(MARGIN + 6 * mm, top - 16 * mm, max(track_w * fit / 100, 3 * mm),
+    # fills from the right (RTL)
+    c.roundRect(track_x + track_w - fill_w, top - 16 * mm, fill_w,
                 3 * mm, 1.5 * mm, fill=1, stroke=0)
 
     state["y"] = top - fh - 10 * mm
 
     # ---------- 04 What the photos show ----------
-    findings = [(n, d) for n, d in images.items()]
+    findings = list(images.items())
 
     if per_image:
 
-        section(4, "ما توضحه الصور")
+        section(4, "ما توضحه الصور", need=11 * mm + 36 * mm)
 
         thumb_w, thumb_h = 34 * mm, 26 * mm
+        inner_w = CONTENT_W - thumb_w - 14 * mm
+        text_right = R - 4 * mm - thumb_w - 5 * mm
 
         for name, data in findings:
 
             info_i = per_image.get(name, {})
             furniture = info_i.get("furniture", [])
             colors = info_i.get("colors", [])
-
-            inner_x_off = thumb_w + 11 * mm
-            inner_w = CONTENT_W - inner_x_off - 5 * mm
 
             h_f = chips(0, 0, inner_w, furniture, MINT, MINT_LINE, EMERALD_900, draw=False)
             h_c = chips(0, 0, inner_w, colors, PAPER, LINE, INK, swatch=True, draw=False)
@@ -1798,19 +1854,18 @@ def build_report_pdf(final_report, images):
             top = state["y"]
             card(MARGIN, top, CONTENT_W, card_h)
 
-            draw_photo(data["image"], MARGIN + 4 * mm, top - 4 * mm - thumb_h,
+            draw_photo(data["image"], R - 4 * mm - thumb_w, top - 4 * mm - thumb_h,
                        thumb_w, thumb_h, radius=2 * mm)
 
-            tx = MARGIN + inner_x_off
             room = info_i.get("room_type", "") or "صورة"
             conf = info_i.get("confidence_level", "")
 
-            text(tx, top - 8 * mm, room, FONT_BOLD, 11, EMERALD_900)
+            text(text_right, top - 8 * mm, room, FONT_BOLD, 11, EMERALD_900, align="right")
 
             if conf:
                 label = f"مستوى الثقة: {conf}"
                 lw = stringWidth(shape(label), FONT, 7.5) + 5 * mm
-                lx = PAGE_W - MARGIN - 5 * mm - lw
+                lx = MARGIN + 5 * mm
                 c.setFillColor(MINT)
                 c.setStrokeColor(MINT_LINE)
                 c.roundRect(lx, top - 9.6 * mm, lw, 5 * mm, 2.5 * mm, fill=1, stroke=1)
@@ -1820,11 +1875,11 @@ def build_report_pdf(final_report, images):
             cy = top - 12 * mm
 
             if h_f:
-                chips(tx, cy, inner_w, furniture, MINT, MINT_LINE, EMERALD_900)
+                chips(text_right, cy, inner_w, furniture, MINT, MINT_LINE, EMERALD_900)
                 cy -= h_f + 2 * mm
 
             if h_c:
-                chips(tx, cy, inner_w, colors, PAPER, LINE, INK, swatch=True)
+                chips(text_right, cy, inner_w, colors, PAPER, LINE, INK, swatch=True)
 
             state["y"] = top - card_h - 4 * mm
 
@@ -1835,7 +1890,7 @@ def build_report_pdf(final_report, images):
 
     if highlights:
 
-        section(5, "أبرز المميزات")
+        section(5, "أبرز المميزات", need=11 * mm + 16 * mm)
 
         for index, item in enumerate(highlights, start=1):
 
@@ -1847,8 +1902,8 @@ def build_report_pdf(final_report, images):
             top = state["y"]
 
             c.setFillColor(EMERALD_900)
-            c.circle(MARGIN + 3.5 * mm, top - 2.2 * mm, 3.4 * mm, fill=1, stroke=0)
-            text(MARGIN + 3.5 * mm, top - 3.6 * mm, str(index), FONT_BOLD, 8.5,
+            c.circle(R - 3.5 * mm, top - 2.2 * mm, 3.4 * mm, fill=1, stroke=0)
+            text(R - 3.5 * mm, top - 3.6 * mm, str(index), FONT_BOLD, 8.5,
                  GOLD_LIGHT, align="center")
 
             ly = top - 3 * mm
@@ -1856,7 +1911,7 @@ def build_report_pdf(final_report, images):
             for line in lines:
                 c.setFont(FONT, 10.5)
                 c.setFillColor(INK)
-                c.drawString(MARGIN + 11 * mm, ly, line)
+                c.drawRightString(R - 11 * mm, ly, line)
                 ly -= 5.4 * mm
 
             state["y"] = top - row_h - 1.5 * mm
@@ -1873,7 +1928,7 @@ def build_report_pdf(final_report, images):
 
     if notes:
 
-        section(6, "كيف قدّر الذكاء الاصطناعي هذه البيانات؟")
+        section(6, "كيف قدّر الذكاء الاصطناعي هذه البيانات؟", need=11 * mm + 18 * mm)
 
         for label, reason in notes:
 
@@ -1884,14 +1939,14 @@ def build_report_pdf(final_report, images):
 
             top = state["y"]
 
-            text(MARGIN, top - 3 * mm, label.upper(), FONT_BOLD, 8, BRASS)
+            text(R, top - 3 * mm, label, FONT_BOLD, 8, BRASS, align="right")
 
             ly = top - 3 * mm
 
             for line in lines:
                 c.setFont(FONT, 10)
                 c.setFillColor(INK)
-                c.drawString(MARGIN + 28 * mm, ly, line)
+                c.drawRightString(R - 28 * mm, ly, line)
                 ly -= 5.2 * mm
 
             c.setStrokeColor(LINE)
@@ -1901,23 +1956,27 @@ def build_report_pdf(final_report, images):
             state["y"] = top - row_h - 2 * mm
 
         # confidence meter
-        confidence = (est.get("confidence") or "").lower()
-        level = {"منخفض": 1, "متوسط": 2, "مرتفع": 3, "low": 1, "medium": 2, "high": 3}.get(confidence, 0)
+        confidence = (est.get("confidence") or "").strip()
+        level = {"منخفض": 1, "متوسط": 2, "مرتفع": 3,
+                 "low": 1, "medium": 2, "high": 3}.get(confidence.lower(), 0)
 
         if level:
 
             ensure(16 * mm)
             top = state["y"] - 4 * mm
 
-            text(MARGIN, top - 3 * mm, "مستوى الثقة", FONT_BOLD, 8, BRASS)
+            text(R, top - 3 * mm, "مستوى الثقة", FONT_BOLD, 8, BRASS, align="right")
+
+            bar_w2, bar_gap = 20 * mm, 2 * mm
+            first_x = R - 28 * mm          # right edge of the first bar
 
             for i in range(3):
+                bx = first_x - (i + 1) * bar_w2 - i * bar_gap
                 c.setFillColor(EMERALD_600 if i < level else MINT)
-                c.roundRect(MARGIN + 28 * mm + i * 22 * mm, top - 4.2 * mm,
-                            20 * mm, 3 * mm, 1.5 * mm, fill=1, stroke=0)
+                c.roundRect(bx, top - 4.2 * mm, bar_w2, 3 * mm, 1.5 * mm, fill=1, stroke=0)
 
-            text(MARGIN + 28 * mm + 3 * 22 * mm + 2 * mm, top - 3.6 * mm,
-                 confidence.capitalize(), FONT_BOLD, 9, EMERALD_900)
+            text(first_x - 3 * bar_w2 - 2 * bar_gap - 2 * mm, top - 3.6 * mm,
+                 confidence, FONT_BOLD, 9, EMERALD_900, align="right")
 
             state["y"] = top - 12 * mm
 
@@ -1927,7 +1986,7 @@ def build_report_pdf(final_report, images):
     note_lines = []
 
     if uncertainty:
-        note_lines.append("ما لا يمكن تأكيده من الصور: " + "; ".join(uncertainty) + ".")
+        note_lines.append("ما لا يمكن تأكيده من الصور: " + "؛ ".join(uncertainty) + ".")
 
     note_lines.append(
         "هذه القيم تقديرات آلية مبنية على الصور المرفوعة فقط. "
@@ -1954,13 +2013,14 @@ def build_report_pdf(final_report, images):
     for line in wrapped:
         c.setFont(FONT, 9)
         c.setFillColor(EMERALD_900)
-        c.drawString(MARGIN + 7 * mm, ly, line)
+        c.drawRightString(R - 7 * mm, ly, line)
         ly -= 4.8 * mm
 
     c.showPage()
     c.save()
 
     return buffer.getvalue()
+
 
 
 # =====================================================
@@ -1992,8 +2052,6 @@ def display_property_card(
         for col, item in zip(cols, image_values[row_start:row_start + 3]):
             with col:
                 st.image(make_thumb(item["image"]), use_container_width=True)
-
-    plural = ""
 
     st.markdown(
         f"""
@@ -2360,10 +2418,10 @@ if "final_report" in st.session_state:
 
         st.warning(
             f"تعذر إنشاء ملف PDF ({pdf_error}). "
-            f"إذا كانت هناك مكتبة ناقصة، ثبّتها في بيئة Python المستخدمة لتشغيل التطبيق "
+            f"إذا كانت هناك مكتبة ناقصة، ثبّتها في بيئة Python المستخدمة "
             f"لتشغيل التطبيق:\n\n"
             f"{sys.executable} -m pip install reportlab pillow-heif "
-            f"arabic-reshaper python-bidi"
+            f"arabic-reshaper python-bidi fonttools"
         )
 
     display_property_card(
