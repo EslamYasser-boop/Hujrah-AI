@@ -1173,13 +1173,16 @@ def build_report_pdf(final_report, images):
     from reportlab.pdfbase.pdfmetrics import stringWidth
 
     # ---------- Fonts (Arabic-capable if the TTF files exist) ----------
+    # Support both the recommended fonts/ folder and the repository root.
     reg_candidates = [
         FONT_DIR / "ReadexPro-Regular.ttf",
+        BASE_DIR / "ReadexPro-Regular.ttf",
         Path("C:/Windows/Fonts/arial.ttf"),
         Path("C:/Windows/Fonts/tahoma.ttf"),
     ]
     bold_candidates = [
         FONT_DIR / "ReadexPro-SemiBold.ttf",
+        BASE_DIR / "ReadexPro-SemiBold.ttf",
         Path("C:/Windows/Fonts/arialbd.ttf"),
         Path("C:/Windows/Fonts/tahomabd.ttf"),
     ]
@@ -1205,11 +1208,22 @@ def build_report_pdf(final_report, images):
     pdfmetrics.registerFont(TTFont("Body-Bold", str(bold)))
     FONT, FONT_BOLD, UNICODE_OK = "Body", "Body-Bold", True
 
+    def has_arabic(value):
+        """Return True when text contains Arabic-script characters."""
+        return any(
+            ("\u0600" <= ch <= "\u08FF")
+            or ("\uFB50" <= ch <= "\uFDFF")
+            or ("\uFE70" <= ch <= "\uFEFF")
+            for ch in str(value)
+        )
+
     def shape(value):
-        text = str(value if value is not None else "")
-        if any("\\u0600" <= ch <= "\\u06FF" for ch in text):
-            text = get_display(arabic_reshaper.reshape(text))
-        return text
+        """Shape Arabic glyphs and apply the Unicode bidirectional algorithm."""
+        value = str(value if value is not None else "")
+        if not has_arabic(value):
+            return value
+        reshaped = arabic_reshaper.reshape(value)
+        return get_display(reshaped, base_dir="R")
 
     # ---------- Palette ----------
     NIGHT = HexColor("#08130F")
@@ -1301,8 +1315,13 @@ def build_report_pdf(final_report, images):
 
     def spaced(x_center, y, value, size, color, spacing=3):
 
-        value = shape(value).upper()
-        width = stringWidth(value, FONT_BOLD, size) + spacing * (len(value) - 1)
+        raw_value = str(value if value is not None else "")
+        if has_arabic(raw_value):
+            value = shape(raw_value)
+            spacing = 0
+        else:
+            value = raw_value.upper()
+        width = stringWidth(value, FONT_BOLD, size) + spacing * max(len(value) - 1, 0)
 
         t = c.beginText(x_center - width / 2, y)
         t.setFont(FONT_BOLD, size)
@@ -1312,7 +1331,14 @@ def build_report_pdf(final_report, images):
         c.drawText(t)
 
     def wrap(value, font, size, width):
-        return simpleSplit(shape(value), font, size, width)
+        """Wrap in logical reading order, then shape each rendered line.
+
+        Applying bidi before line wrapping can reverse punctuation and mixed
+        Arabic/Latin text at line boundaries, so the order here is deliberate.
+        """
+        logical_text = str(value if value is not None else "")
+        logical_lines = simpleSplit(logical_text, font, size, width)
+        return [shape(line) for line in logical_lines]
 
     def arch_path(x, y, w, h):
 
