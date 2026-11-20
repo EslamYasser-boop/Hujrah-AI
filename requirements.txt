@@ -9,3 +9,7 @@ Pillow
 accelerate
 google-genai
 python-dotenv
+reportlab
+pillow-heif
+arabic-reshaper
+python-bidi
