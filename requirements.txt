@@ -13,3 +13,5 @@ reportlab
 pillow-heif
 arabic-reshaper
 python-bidi
+arabic-reshaper
+python-bidi
