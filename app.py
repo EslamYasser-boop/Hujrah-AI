@@ -61,7 +61,7 @@ MIN_IMAGES = 1
 MAX_IMAGES = 6
 
 st.set_page_config(
-    page_title="Hujrah AI | Property Analyzer",
+    page_title="حُجرة | تحليل الشقق",
     page_icon="🏠",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -592,6 +592,39 @@ hr { border-color: var(--line); }
     }
 }
 
+
+/* Arabic RTL layout */
+html, body, [class*="css"], .stApp {
+    direction: rtl !important;
+    text-align: right !important;
+    font-family: 'Readex Pro', Tahoma, Arial, sans-serif !important;
+}
+.block-container, .stMarkdown, .stText, .stCaption, label, p, h1, h2, h3, h4 {
+    direction: rtl;
+    text-align: right;
+}
+div[data-testid="stExpander"], div[data-testid="stFileUploader"],
+div[data-testid="stAlert"], div[data-testid="stMetric"],
+div[data-testid="stTextInput"], div[data-testid="stNumberInput"] {
+    direction: rtl;
+    text-align: right;
+}
+input, textarea { direction: rtl !important; text-align: right !important; }
+.stButton > button, .stDownloadButton > button {
+    direction: rtl;
+    font-family: 'Readex Pro', Tahoma, Arial, sans-serif !important;
+}
+div[data-testid="stImage"] figcaption { direction: rtl; text-align: center; }
+.property-card, .description-box, .pdi-box, .info-box {
+    direction: rtl;
+    text-align: right;
+}
+.tag { margin: 3px 0 3px 6px; }
+.description-box {
+    border-left: 1px solid var(--line);
+    border-right: 3px solid var(--gold);
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -971,58 +1004,44 @@ def run_listing_analysis(client, images, location, florence_results):
         )
 
     prompt = f"""
-You are a careful real estate listing assistant for a student housing
-platform in Egypt. Look at the apartment photos ({names}) and produce
-a verified, publish-ready listing.
+أنت مساعد متخصص في تحليل العقارات لمنصة سكن طلابي في مصر.
+افحص صور الشقة ({names}) وأنشئ إعلانًا دقيقًا ومراجعًا وجاهزًا لمراجعة المالك.
 
-Apartment address (given by the owner): {location}
+عنوان الشقة الذي أدخله المالك: {location}
+ملاحظات مساعدة من نموذج تحليل الصور (قد تكون بالإنجليزية وقد تحتوي على أخطاء؛ اعتمد على الصور الأصلية أولًا، واكتب كل المخرجات بالعربية):
 {hints}
 
-STRICT RULES:
-- Mention only what is clearly visible. Never invent furniture, colors,
-  decorations or facilities.
-- If you are not sure of a material or of what a device is, use a generic
-  word ('chair', 'wall-mounted device'). Never name a material (metal,
-  leather, marble) or a device type (meter, router) unless a label or
-  clear shape proves it.
-- Do not describe a textile as a rug unless it is on the floor. If a
-  patterned fabric is on a desk or table, call it 'a patterned cover'.
-- Do not claim size, cleanliness, natural lighting, location or quality
-  without direct visual evidence. Not visible does not mean absent.
-- Do not assume different photos are different rooms.
-- Return valid JSON only. Do not use double quotes inside text values
-  (use single quotes). Keep every short text value under 25 words.
+شرط اللغة الأساسي:
+- جميع القيم النصية التي ستظهر للمستخدم يجب أن تكون باللغة العربية فقط.
+- استخدم العربية الفصحى الواضحة والمهنية.
+- اسم الإعلان والوصف والمميزات وأسباب التقييم والإيجار والسعة والثقة وعدم اليقين كلها بالعربية.
+- أسماء مفاتيح JSON يجب أن تبقى باللغة الإنجليزية كما هي تمامًا حتى لا يتعطل التطبيق.
+- لا تكتب أي جملة إنجليزية داخل القيم النصية.
+- اكتب أسماء الغرف والأثاث والألوان بالعربية.
 
-FIELDS:
-- listing_name: short natural English title (max 7 words), no invented
-  location or facilities.
-- verified_description: professional English real estate text, 60 to 110
-  words, written as ONE cohesive description of the apartment, not a
-  photo-by-photo inventory. Include only clearly visible items and
-  features that matter to a student renter (furniture, bed, desk, wall
-  colors, flooring, curtains, visible utilities). Skip trivial items
-  (bottles, clothes, bags, cables, shoes). Do not mention 'photo' or
-  'image'. Do not end with a concluding marketing sentence. Do not use
-  words like 'equipped', 'ideal', 'perfect', 'cozy' or 'spacious'.
-  Rugs cover only the visible part of the floor.
-- highlights: 3 to 5 short selling points (max 8 words each), visible only.
-- estimated_rating: 0 to 5 in steps of 0.5 from furnishing, finishing and
-  variety shown. Never mention cleanliness. This is an AI estimate.
-- estimated_rent_min_egp / estimated_rent_max_egp: realistic monthly rent
-  range in EGP for a student rental in that area of Egypt.
-- estimated_capacity: how many people the visible sleeping spaces can
-  reasonably host (whole number, at least 1).
-- *_reason: one short English sentence each, based only on what is visible
-  (and the owner's address for the rent).
-- confidence: use 'high' ONLY if every photo is sharp and every claim is
-  unambiguous. If any item was named with uncertainty, or photos show
-  different angles of unclear rooms, use 'medium' or 'low'.
-- images: one entry per photo, with room_type (or 'Unclear'),
-  confidence_level (low/medium/high), furniture (visible items only),
-  colors (main visible colors, simple names like beige, white, dark wood).
-- uncertainty: up to 3 short notes about what cannot be confirmed.
+قواعد صارمة:
+- اذكر فقط ما يظهر بوضوح. لا تخترع أثاثًا أو ألوانًا أو ديكورات أو مرافق.
+- إذا لم تكن متأكدًا من نوع خامة أو جهاز، فاستخدم وصفًا عامًا مثل كرسي أو جهاز مثبت على الحائط.
+- لا تحدد نوع الخامة أو الجهاز دون دليل بصري واضح.
+- لا تصف قطعة قماش بأنها سجادة إلا إذا كانت على الأرض.
+- لا تدّعِ مساحة أو نظافة أو إضاءة طبيعية أو موقعًا أو جودة دون دليل بصري مباشر.
+- عدم ظهور شيء في الصور لا يعني عدم وجوده في الشقة.
+- لا تفترض أن الصور المختلفة تُظهر غرفًا مختلفة.
+- أعد JSON صالحًا فقط، ولا تضع علامات اقتباس مزدوجة داخل القيم النصية.
 
-Return exactly this structure:
+الحقول المطلوبة:
+- listing_name: اسم عربي قصير وطبيعي للإعلان، دون اختلاق موقع أو مرافق.
+- verified_description: وصف عقاري عربي مهني من 60 إلى 110 كلمات، كوصف مترابط واحد للشقة وليس قائمة صورة بصورة. اذكر العناصر الظاهرة بوضوح فقط والمهمة للطالب مثل الأثاث والسرير والمكتب وألوان الجدران والأرضيات والستائر والتجهيزات الظاهرة. تجاهل الأشياء العابرة مثل الزجاجات والملابس والحقائب والأسلاك والأحذية. لا تذكر الصور أو اللقطات ولا تضف جملة تسويقية ختامية.
+- highlights: من 3 إلى 5 مميزات قصيرة بالعربية، ظاهرة فقط.
+- estimated_rating: تقييم من 0 إلى 5 بزيادات 0.5 بناءً على الأثاث والتشطيبات والتنوع الظاهر. لا تذكر النظافة. هذا تقدير آلي.
+- estimated_rent_min_egp و estimated_rent_max_egp: نطاق إيجار شهري واقعي بالجنيه المصري لسكن طلابي في المنطقة التي أدخلها المالك.
+- estimated_capacity: عدد الأفراد الذين يمكن أن تستوعبهم أماكن النوم الظاهرة بشكل معقول، عدد صحيح لا يقل عن 1.
+- *_reason: جملة عربية قصيرة لكل سبب، اعتمادًا على العناصر الظاهرة فقط، وعلى عنوان المالك عند تقدير الإيجار.
+- confidence: استخدم "مرتفع" فقط إذا كانت كل الصور واضحة وكل الادعاءات مؤكدة. استخدم "متوسط" أو "منخفض" عند وجود أي غموض.
+- images: عنصر لكل صورة، مع room_type أو "غير واضح"، ومستوى الثقة بالعربية، والأثاث الظاهر فقط، والألوان الرئيسية بالعربية.
+- uncertainty: حتى 3 ملاحظات قصيرة بالعربية حول ما لا يمكن تأكيده.
+
+أعد هذا الهيكل بالضبط، مع إبقاء مفاتيح JSON كما هي:
 {{
   "listing_name": "",
   "verified_description": "",
@@ -1034,12 +1053,12 @@ Return exactly this structure:
   "rent_reason": "",
   "estimated_capacity": 1,
   "capacity_reason": "",
-  "confidence": "",
+  "confidence": "متوسط",
   "images": [
     {{
       "image_name": "",
       "room_type": "",
-      "confidence_level": "",
+      "confidence_level": "متوسط",
       "furniture": [],
       "colors": []
     }}
@@ -1084,19 +1103,24 @@ Return exactly this structure:
         capacity = 1
 
     if rent_max > 0 and rent_min != rent_max:
-        rent_text = f"EGP {rent_min:,} to {rent_max:,}"
+        rent_text = f"من {rent_min:,} إلى {rent_max:,} جنيه مصري"
     elif rent_max > 0:
-        rent_text = f"EGP {rent_max:,}"
+        rent_text = f"{rent_max:,} جنيه مصري"
     else:
-        rent_text = "Not estimated"
+        rent_text = "لم يتم التقدير"
 
     # The model gives 'high' confidence too easily:
     # lower it when it also listed things it could not confirm.
-    confidence = str(raw.get("confidence", "")).strip().lower()
+    confidence_raw = str(raw.get("confidence", "")).strip().lower()
+    confidence_map = {
+        "high": "مرتفع", "medium": "متوسط", "low": "منخفض",
+        "مرتفع": "مرتفع", "متوسط": "متوسط", "منخفض": "منخفض"
+    }
+    confidence = confidence_map.get(confidence_raw, "متوسط")
     uncertainty_list = as_list(raw.get("uncertainty"), 3)
 
-    if confidence == "high" and uncertainty_list:
-        confidence = "medium"
+    if confidence == "مرتفع" and uncertainty_list:
+        confidence = "متوسط"
 
     per_image = []
 
@@ -1104,14 +1128,14 @@ Return exactly this structure:
         if isinstance(item, dict):
             per_image.append({
                 "image_name": str(item.get("image_name", "")),
-                "room_type": str(item.get("room_type", "")).strip() or "Unclear",
+                "room_type": str(item.get("room_type", "")).strip() or "غير واضح",
                 "confidence_level": str(item.get("confidence_level", "")).strip(),
                 "furniture": as_list(item.get("furniture"), 8),
                 "colors": as_list(item.get("colors"), 5),
             })
 
     return {
-        "listing_name": str(raw.get("listing_name", "")).strip() or "Apartment Listing",
+        "listing_name": str(raw.get("listing_name", "")).strip() or "إعلان شقة",
         "verified_description": str(raw.get("verified_description", "")).strip(),
         "highlights": as_list(raw.get("highlights"), 5),
         "estimated_rating": rating,
@@ -1149,33 +1173,43 @@ def build_report_pdf(final_report, images):
     from reportlab.pdfbase.pdfmetrics import stringWidth
 
     # ---------- Fonts (Arabic-capable if the TTF files exist) ----------
-    reg = FONT_DIR / "ReadexPro-Regular.ttf"
-    bold = FONT_DIR / "ReadexPro-SemiBold.ttf"
+    reg_candidates = [
+        FONT_DIR / "ReadexPro-Regular.ttf",
+        Path("C:/Windows/Fonts/arial.ttf"),
+        Path("C:/Windows/Fonts/tahoma.ttf"),
+    ]
+    bold_candidates = [
+        FONT_DIR / "ReadexPro-SemiBold.ttf",
+        Path("C:/Windows/Fonts/arialbd.ttf"),
+        Path("C:/Windows/Fonts/tahomabd.ttf"),
+    ]
+    reg = next((font_path for font_path in reg_candidates if font_path.exists()), None)
+    bold = next((font_path for font_path in bold_candidates if font_path.exists()), None)
 
-    if reg.exists() and bold.exists():
-        pdfmetrics.registerFont(TTFont("Body", str(reg)))
-        pdfmetrics.registerFont(TTFont("Body-Bold", str(bold)))
-        FONT, FONT_BOLD, UNICODE_OK = "Body", "Body-Bold", True
-    else:
-        FONT, FONT_BOLD, UNICODE_OK = "Helvetica", "Helvetica-Bold", False
+    if not reg or not bold:
+        raise RuntimeError(
+            "لإنشاء تقرير PDF باللغة العربية، أضف الخطين "
+            "ReadexPro-Regular.ttf و ReadexPro-SemiBold.ttf داخل مجلد fonts."
+        )
+
+    try:
+        import arabic_reshaper
+        from bidi.algorithm import get_display
+    except ImportError as font_error:
+        raise RuntimeError(
+            "ثبّت دعم العربية في PDF بالأمر: "
+            "python -m pip install arabic-reshaper python-bidi"
+        ) from font_error
+
+    pdfmetrics.registerFont(TTFont("Body", str(reg)))
+    pdfmetrics.registerFont(TTFont("Body-Bold", str(bold)))
+    FONT, FONT_BOLD, UNICODE_OK = "Body", "Body-Bold", True
 
     def shape(value):
-
         text = str(value if value is not None else "")
-
-        if UNICODE_OK:
-
-            if any("\u0600" <= ch <= "\u06FF" for ch in text):
-                try:
-                    import arabic_reshaper
-                    from bidi.algorithm import get_display
-                    text = get_display(arabic_reshaper.reshape(text))
-                except ImportError:
-                    pass
-
-            return text
-
-        return text.encode("cp1252", "ignore").decode("cp1252")
+        if any("\\u0600" <= ch <= "\\u06FF" for ch in text):
+            text = get_display(arabic_reshaper.reshape(text))
+        return text
 
     # ---------- Palette ----------
     NIGHT = HexColor("#08130F")
@@ -1206,6 +1240,13 @@ def build_report_pdf(final_report, images):
         "silver": "#BFC3C7", "tan": "#C8A877", "ivory": "#F3EDD7",
         "purple": "#7C5BA6", "teal": "#2F8C8A", "turquoise": "#40B5B0",
         "light": "#E9E6DC", "terracotta": "#B9674A",
+        "أبيض": "#F4F4F0", "بيج": "#D9C7A3", "كريمي": "#EFE4C8",
+        "بني": "#7A5230", "خشبي": "#9A6B3F", "رمادي": "#9A9A9A",
+        "أسود": "#1C1C1C", "أزرق": "#3F6EA8", "كحلي": "#1F3558",
+        "أخضر": "#4C8A5B", "أحمر": "#B04040", "وردي": "#E3A2B1",
+        "أصفر": "#E3C55A", "برتقالي": "#D98A3D", "ذهبي": "#C9A24D",
+        "فضي": "#BFC3C7", "عاجي": "#F3EDD7", "بنفسجي": "#7C5BA6",
+        "تركواز": "#40B5B0", "فاتح": "#E9E6DC",
     }
 
     PAGE_W, PAGE_H = A4
@@ -1217,7 +1258,7 @@ def build_report_pdf(final_report, images):
     est = final_report.get("listing_estimate", {})
     per_image = {d.get("image_name"): d for d in est.get("images", [])}
 
-    listing_name = info.get("name", "Apartment Listing")
+    listing_name = info.get("name", "إعلان شقة")
     location = info.get("location", "")
 
     try:
@@ -1233,14 +1274,14 @@ def build_report_pdf(final_report, images):
 
     fit = min(100, round(capacity / people * 100))
 
-    rent_text = info.get("monthly_rent", "Not estimated")
+    rent_text = info.get("monthly_rent", "لم يتم التقدير")
     rent_min = est.get("estimated_rent_min_egp", 0) or 0
     rent_max = est.get("estimated_rent_max_egp", 0) or 0
 
     buffer = BytesIO()
     c = rl_canvas.Canvas(buffer, pagesize=A4)
-    c.setTitle(f"{listing_name} | Hujrah AI")
-    c.setAuthor("Hujrah AI")
+    c.setTitle(f"{listing_name} | حُجرة")
+    c.setAuthor("حُجرة")
 
     state = {"y": 0.0, "page": 1}
 
@@ -1407,7 +1448,7 @@ def build_report_pdf(final_report, images):
         c.setFillColor(GOLD)
         c.rect(0, PAGE_H - 14 * mm - 0.8, PAGE_W, 0.8, fill=1, stroke=0)
 
-        text(MARGIN, PAGE_H - 9 * mm, "HUJRAH AI", FONT_BOLD, 9, GOLD_LIGHT)
+        text(MARGIN, PAGE_H - 9 * mm, "حُجرة", FONT_BOLD, 9, GOLD_LIGHT)
         text(PAGE_W - MARGIN, PAGE_H - 9 * mm, listing_name, FONT, 9,
              HexColor("#BFD8C8"), align="right")
 
@@ -1416,7 +1457,7 @@ def build_report_pdf(final_report, images):
         c.line(MARGIN, 16 * mm, PAGE_W - MARGIN, 16 * mm)
 
         text(MARGIN, 11 * mm,
-             "Hujrah AI  |  AI-assisted analysis. All listings require owner approval.",
+             "حُجرة | تحليل بمساعدة الذكاء الاصطناعي. جميع الإعلانات تتطلب موافقة المالك.",
              FONT, 8, MUTED)
         text(PAGE_W - MARGIN, 11 * mm, f"{state['page']}", FONT_BOLD, 8,
              EMERALD_900, align="right")
@@ -1457,7 +1498,7 @@ def build_report_pdf(final_report, images):
         c.circle(PAGE_W / 2, PAGE_H - 100 * mm, (120 - i * 20) * mm, fill=1, stroke=0)
     c.setFillAlpha(1)
 
-    spaced(PAGE_W / 2, PAGE_H - 16 * mm, "Hujrah AI", 11, GOLD_LIGHT, spacing=5)
+    spaced(PAGE_W / 2, PAGE_H - 16 * mm, "حُجرة", 11, GOLD_LIGHT, spacing=5)
 
     arch_w, arch_h = 104 * mm, 140 * mm
     ax = (PAGE_W - arch_w) / 2
@@ -1489,7 +1530,7 @@ def build_report_pdf(final_report, images):
     py = ay - pill_h / 2
     c.setFillColor(GOLD)
     c.roundRect(px, py, pill_w, pill_h, pill_h / 2, fill=1, stroke=0)
-    spaced(PAGE_W / 2, py + 2.7 * mm, "AI verified listing", 7.5, NIGHT, spacing=1.6)
+    spaced(PAGE_W / 2, py + 2.7 * mm, "إعلان مُراجع بالذكاء الاصطناعي", 7.5, NIGHT, spacing=1.6)
 
     # title
     title_lines = wrap(listing_name, FONT_BOLD, 28, PAGE_W - 40 * mm)[:2]
@@ -1524,24 +1565,24 @@ def build_report_pdf(final_report, images):
     cx3 = MARGIN + col_w * 2.5
 
     text(cx1, sy + 5 * mm, rent_text, FONT_BOLD, 13, GOLD_LIGHT, align="center")
-    text(cx1, sy - 3 * mm, "MONTHLY RENT (AI ESTIMATE)", FONT, 7, MUTED_DARK, align="center")
+    text(cx1, sy - 3 * mm, "الإيجار الشهري (تقديري)", FONT, 7, MUTED_DARK, align="center")
 
     star_size = 5 * mm
     star_w = 5 * star_size + 4 * star_size * 0.25
     draw_stars(cx2 - star_w / 2, sy + 3 * mm, star_size, rating,
                on=GOLD_LIGHT, off=HexColor("#2B3A32"))
-    text(cx2, sy - 3 * mm, f"{rating:.1f} / 5  RATING (AI ESTIMATE)", FONT, 7,
+    text(cx2, sy - 3 * mm, f"{rating:.1f} من 5 - تقييم تقديري", FONT, 7,
          MUTED_DARK, align="center")
 
-    text(cx3, sy + 5 * mm, f"{capacity} {'person' if capacity == 1 else 'people'}",
+    text(cx3, sy + 5 * mm, f"{capacity} {'فرد' if capacity == 1 else 'أفراد'}",
          FONT_BOLD, 13, GOLD_LIGHT, align="center")
-    text(cx3, sy - 3 * mm, "ESTIMATED CAPACITY", FONT, 7, MUTED_DARK, align="center")
+    text(cx3, sy - 3 * mm, "السعة التقديرية", FONT, 7, MUTED_DARK, align="center")
 
     text(PAGE_W / 2, 18 * mm,
-         f"Report generated {datetime.now().strftime('%d %B %Y')}",
+         f"تاريخ إنشاء التقرير: {datetime.now().strftime('%d-%m-%Y')}",
          FONT, 8, MUTED_DARK, align="center")
     text(PAGE_W / 2, 13 * mm,
-         "AI-assisted analysis. All values are estimates and require owner approval.",
+         "تحليل بمساعدة الذكاء الاصطناعي. جميع القيم تقديرية وتتطلب موافقة المالك.",
          FONT, 7.5, MUTED_DARK, align="center")
 
     # =====================================================
@@ -1552,7 +1593,7 @@ def build_report_pdf(final_report, images):
     body_page()
 
     # ---------- 01 Gallery ----------
-    section(1, "The apartment")
+    section(1, "الشقة")
 
     pics = list(images.items())
     gap = 4 * mm
@@ -1571,7 +1612,7 @@ def build_report_pdf(final_report, images):
             x = MARGIN + i * (pw + gap)
             draw_photo(data["image"], x, top - ph, pw, ph)
 
-            room = per_image.get(name, {}).get("room_type", "") or "Photo"
+            room = per_image.get(name, {}).get("room_type", "") or "صورة"
             label_w = min(pw, stringWidth(shape(room), FONT_BOLD, 8) + 8 * mm)
 
             c.setFillColor(MINT)
@@ -1586,7 +1627,7 @@ def build_report_pdf(final_report, images):
     state["y"] -= 2 * mm
 
     # ---------- 02 Description ----------
-    section(2, "About this apartment")
+    section(2, "عن الشقة")
 
     description = get_verified_description(final_report)
     lines = wrap(description, FONT, 10.5, CONTENT_W - 14 * mm)
@@ -1612,7 +1653,7 @@ def build_report_pdf(final_report, images):
     state["y"] = top - box_h - 10 * mm
 
     # ---------- 03 At a glance ----------
-    section(3, "At a glance")
+    section(3, "نظرة سريعة")
 
     ensure(66 * mm)
 
@@ -1623,7 +1664,7 @@ def build_report_pdf(final_report, images):
     # Rent
     x = MARGIN
     card(x, top, cw, ch)
-    text(x + 5 * mm, top - 7 * mm, "MONTHLY RENT", FONT_BOLD, 7, MUTED)
+    text(x + 5 * mm, top - 7 * mm, "الإيجار الشهري", FONT_BOLD, 7, MUTED)
     text(x + 5 * mm, top - 15 * mm, rent_text, FONT_BOLD, 12.5, EMERALD_600)
 
     bar_x, bar_w, bar_y = x + 5 * mm, cw - 10 * mm, top - 24 * mm
@@ -1638,25 +1679,25 @@ def build_report_pdf(final_report, images):
         c.setFillColor(BRASS)
         c.roundRect(lo, bar_y, max(hi - lo, 2 * mm), 2.4 * mm, 1.2 * mm, fill=1, stroke=0)
 
-    text(x + 5 * mm, top - 30 * mm, "AI estimate, per month", FONT, 7.5, MUTED)
+    text(x + 5 * mm, top - 30 * mm, "تقدير شهري بالذكاء الاصطناعي", FONT, 7.5, MUTED)
 
     # Rating
     x = MARGIN + cw + gap
     card(x, top, cw, ch)
-    text(x + 5 * mm, top - 7 * mm, "RATING", FONT_BOLD, 7, MUTED)
+    text(x + 5 * mm, top - 7 * mm, "التقييم", FONT_BOLD, 7, MUTED)
     text(x + 5 * mm, top - 17 * mm, f"{rating:.1f}", FONT_BOLD, 20, EMERALD_600)
     text(x + 5 * mm + stringWidth(f"{rating:.1f}", FONT_BOLD, 20) + 1.5 * mm,
          top - 17 * mm, "/ 5", FONT, 9, MUTED)
     draw_stars(x + 5 * mm, top - 26 * mm, 5 * mm, rating)
-    text(x + 5 * mm, top - 31.5 * mm, "AI estimate from the photos", FONT, 7.5, MUTED)
+    text(x + 5 * mm, top - 31.5 * mm, "تقدير اعتمادًا على الصور", FONT, 7.5, MUTED)
 
     # Capacity
     x = MARGIN + 2 * (cw + gap)
     card(x, top, cw, ch)
-    text(x + 5 * mm, top - 7 * mm, "CAPACITY", FONT_BOLD, 7, MUTED)
+    text(x + 5 * mm, top - 7 * mm, "السعة", FONT_BOLD, 7, MUTED)
     text(x + 5 * mm, top - 17 * mm, str(capacity), FONT_BOLD, 20, EMERALD_600)
     text(x + 5 * mm + stringWidth(str(capacity), FONT_BOLD, 20) + 1.5 * mm,
-         top - 17 * mm, "people", FONT, 9, MUTED)
+         top - 17 * mm, "أفراد", FONT, 9, MUTED)
 
     shown = min(capacity, 8)
 
@@ -1674,14 +1715,14 @@ def build_report_pdf(final_report, images):
 
     state["y"] = top - ch - 5 * mm
 
-    # Occupancy fit
+    # مدى ملاءمة السعة
     fh = 20 * mm
     ensure(fh)
     top = state["y"]
 
     card(MARGIN, top, CONTENT_W, fh)
     text(MARGIN + 6 * mm, top - 7.5 * mm,
-         f"OCCUPANCY FIT  |  for {people} {'person' if people == 1 else 'people'} needed",
+         f"مدى ملاءمة السعة لعدد {people} من الأفراد المطلوبين",
          FONT_BOLD, 7.5, MUTED)
     text(PAGE_W - MARGIN - 6 * mm, top - 9 * mm, f"{fit}%", FONT_BOLD, 16,
          EMERALD_600, align="right")
@@ -1700,7 +1741,7 @@ def build_report_pdf(final_report, images):
 
     if per_image:
 
-        section(4, "What the photos show")
+        section(4, "ما توضحه الصور")
 
         thumb_w, thumb_h = 34 * mm, 26 * mm
 
@@ -1728,7 +1769,7 @@ def build_report_pdf(final_report, images):
                        thumb_w, thumb_h, radius=2 * mm)
 
             tx = MARGIN + inner_x_off
-            room = info_i.get("room_type", "") or "Photo"
+            room = info_i.get("room_type", "") or "صورة"
             conf = info_i.get("confidence_level", "")
 
             text(tx, top - 8 * mm, room, FONT_BOLD, 11, EMERALD_900)
@@ -1761,7 +1802,7 @@ def build_report_pdf(final_report, images):
 
     if highlights:
 
-        section(5, "Highlights")
+        section(5, "أبرز المميزات")
 
         for index, item in enumerate(highlights, start=1):
 
@@ -1791,15 +1832,15 @@ def build_report_pdf(final_report, images):
 
     # ---------- 06 How the AI estimated ----------
     notes = [
-        ("Rating", est.get("rating_reason", "")),
-        ("Rent", est.get("rent_reason", "")),
-        ("Capacity", est.get("capacity_reason", "")),
+        ("التقييم", est.get("rating_reason", "")),
+        ("الإيجار", est.get("rent_reason", "")),
+        ("السعة", est.get("capacity_reason", "")),
     ]
     notes = [(a, b) for a, b in notes if b]
 
     if notes:
 
-        section(6, "How the AI estimated these values")
+        section(6, "كيف قدّر الذكاء الاصطناعي هذه البيانات؟")
 
         for label, reason in notes:
 
@@ -1828,14 +1869,14 @@ def build_report_pdf(final_report, images):
 
         # confidence meter
         confidence = (est.get("confidence") or "").lower()
-        level = {"low": 1, "medium": 2, "high": 3}.get(confidence, 0)
+        level = {"منخفض": 1, "متوسط": 2, "مرتفع": 3, "low": 1, "medium": 2, "high": 3}.get(confidence, 0)
 
         if level:
 
             ensure(16 * mm)
             top = state["y"] - 4 * mm
 
-            text(MARGIN, top - 3 * mm, "AI CONFIDENCE", FONT_BOLD, 8, BRASS)
+            text(MARGIN, top - 3 * mm, "مستوى الثقة", FONT_BOLD, 8, BRASS)
 
             for i in range(3):
                 c.setFillColor(EMERALD_600 if i < level else MINT)
@@ -1853,11 +1894,11 @@ def build_report_pdf(final_report, images):
     note_lines = []
 
     if uncertainty:
-        note_lines.append("What the photos cannot confirm: " + "; ".join(uncertainty) + ".")
+        note_lines.append("ما لا يمكن تأكيده من الصور: " + "; ".join(uncertainty) + ".")
 
     note_lines.append(
-        "These values are AI estimates based only on the uploaded photos. "
-        "The owner should review and approve every detail before publishing."
+        "هذه القيم تقديرات آلية مبنية على الصور المرفوعة فقط. "
+        "يجب على المالك مراجعة كل التفاصيل والموافقة عليها قبل النشر."
     )
 
     wrapped = []
@@ -1904,7 +1945,7 @@ def display_property_card(
 ):
 
     st.markdown(
-        '<div class="section-title">Property Preview</div>',
+        '<div class="section-title">معاينة الإعلان</div>',
         unsafe_allow_html=True
     )
 
@@ -1919,7 +1960,7 @@ def display_property_card(
             with col:
                 st.image(make_thumb(item["image"]), use_container_width=True)
 
-    plural = "s" if n_images != 1 else ""
+    plural = ""
 
     st.markdown(
         f"""
@@ -1927,9 +1968,9 @@ def display_property_card(
             <div class="property-title">{safe_text(listing_name)}</div>
             <div class="property-location">📍 {safe_text(location)}</div>
             <div style="margin-bottom:12px;">
-                <span class="tag">{n_images} apartment photo{plural}</span>
-                <span class="tag">AI image analysis</span>
-                <span class="tag">Owner approval required</span>
+                <span class="tag">{n_images} صورة للشقة</span>
+                <span class="tag">تحليل الصور بالذكاء الاصطناعي</span>
+                <span class="tag">يتطلب موافقة المالك</span>
             </div>
         </div>
         """,
@@ -1946,7 +1987,7 @@ def display_property_card(
         st.markdown(
             f"""
             <div class="stars" style="--pct: {stars_percent:.0f}%;">★★★★★</div>
-            <div class="rating-caption">{rating:.1f} out of 5 (AI estimate)</div>
+            <div class="rating-caption">{rating:.1f} من 5 (تقدير الذكاء الاصطناعي)</div>
             """,
             unsafe_allow_html=True
         )
@@ -1955,20 +1996,20 @@ def display_property_card(
         st.markdown(
             f"""
             <div class="price">{safe_text(rent)}</div>
-            <div class="price-caption">Monthly rent (AI estimate)</div>
+            <div class="price-caption">الإيجار الشهري (تقدير الذكاء الاصطناعي)</div>
             """,
             unsafe_allow_html=True
         )
 
     with col3:
 
-        suitability = min(100, round((max_occupants / max(occupants, 1)) * 100))
+        suitability = min(100, round((max_occupants / max(occupants, 1)) * 100)) if max_occupants > 0 else 0
 
         st.markdown(
             f"""
             <div class="pdi-box">
                 <div class="pdi-number">{suitability}%</div>
-                <div class="pdi-label">Occupancy fit</div>
+                <div class="pdi-label">مدى ملاءمة السعة</div>
             </div>
             """,
             unsafe_allow_html=True
@@ -1977,17 +2018,17 @@ def display_property_card(
     st.write("")
 
     st.markdown(
-        '<div class="section-title">Quick Information</div>',
+        '<div class="section-title">معلومات سريعة</div>',
         unsafe_allow_html=True
     )
 
     info_cols = st.columns(4)
 
     info_items = [
-        (str(n_images), "Uploaded photos"),
-        (str(occupants), "Required people"),
-        (str(max_occupants), "Estimated capacity"),
-        ("AI", "Visual analysis")
+        (str(n_images), "الصور المرفوعة"),
+        (str(occupants), "العدد المطلوب للأفراد"),
+        (str(max_occupants), "السعة التقديرية"),
+        ("ذكي", "تحليل الصور")
     ]
 
     for col, (number, label) in zip(info_cols, info_items):
@@ -2006,17 +2047,17 @@ def display_property_card(
 def display_full_details(final_report):
 
     st.markdown(
-        '<div class="section-title">Apartment Details</div>',
+        '<div class="section-title">تفاصيل الشقة</div>',
         unsafe_allow_html=True
     )
 
     description = get_verified_description(final_report)
     estimate = final_report.get("listing_estimate", {})
 
-    with st.expander("Apartment details and full description", expanded=False):
+    with st.expander("تفاصيل الشقة والوصف الكامل", expanded=False):
 
         st.markdown(
-            '<div class="details-heading">AI verified description</div>',
+            '<div class="details-heading">الوصف الذي راجعه الذكاء الاصطناعي</div>',
             unsafe_allow_html=True
         )
 
@@ -2026,9 +2067,9 @@ def display_full_details(final_report):
         )
 
         notes = [
-            ("Rating", estimate.get("rating_reason", "")),
-            ("Rent", estimate.get("rent_reason", "")),
-            ("Capacity", estimate.get("capacity_reason", "")),
+            ("التقييم", estimate.get("rating_reason", "")),
+            ("الإيجار", estimate.get("rent_reason", "")),
+            ("السعة", estimate.get("capacity_reason", "")),
         ]
 
         notes = [(a, b) for a, b in notes if b]
@@ -2038,7 +2079,7 @@ def display_full_details(final_report):
             st.write("")
 
             st.markdown(
-                '<div class="details-heading">How the AI estimated these values</div>',
+                '<div class="details-heading">كيف قدّر الذكاء الاصطناعي هذه البيانات؟</div>',
                 unsafe_allow_html=True
             )
 
@@ -2049,8 +2090,8 @@ def display_full_details(final_report):
 
             if confidence:
                 st.caption(
-                    f"AI confidence: {safe_text(confidence)}. "
-                    "These are estimates from the photos only."
+                    f"مستوى الثقة: {safe_text(confidence)}. "
+                    "هذه تقديرات مبنية على الصور فقط."
                 )
 
 
@@ -2061,8 +2102,8 @@ def display_full_details(final_report):
 st.markdown(
     '<div class="hero">'
     '<div class="hero-text">'
-    '<h1>Hujrah AI</h1>'
-    '<p>Your photos in. A verified, publish-ready apartment listing out.</p>'
+    '<h1>حُجرة</h1>'
+    '<p>ارفع صور شقتك واحصل على إعلان سكن موصوف ومُراجع وجاهز لمراجعتك.</p>'
     '</div>'
     '<div class="arch" aria-hidden="true"><span>حجرة</span></div>'
     '</div>',
@@ -2070,36 +2111,35 @@ st.markdown(
 )
 
 st.markdown(
-    '<div class="section-title">Create your listing</div>',
+    '<div class="section-title">أنشئ إعلان شقتك</div>',
     unsafe_allow_html=True
 )
 
 st.write(
-    "Upload your apartment photos and let the AI analyze the visible "
-    "furniture, colors, and details."
+    "ارفع صور شقتك ودع الذكاء الاصطناعي يحلل الأثاث والألوان والتفاصيل الظاهرة."
 )
 
-with st.expander("Listing Information", expanded=True):
+with st.expander("بيانات الإعلان", expanded=True):
 
     col1, col2 = st.columns(2)
 
     with col1:
-        location = st.text_input("Apartment Address", value="Giza, Egypt")
+        location = st.text_input("عنوان الشقة", value="الجيزة، مصر")
 
     with col2:
         occupants = st.number_input(
-            "Required Number of People",
+            "العدد المطلوب للأفراد",
             min_value=1,
             max_value=20,
             value=2
         )
 
     st.caption(
-        "The name, rating, rent and capacity are created by the AI from your photos."
+        "يقترح الذكاء الاصطناعي اسم الإعلان والتقييم والإيجار والسعة التقديرية بناءً على الصور."
     )
 
 uploaded_files = st.file_uploader(
-    f"Upload {MIN_IMAGES} to {MAX_IMAGES} apartment photos",
+    f"ارفع من {MIN_IMAGES} إلى {MAX_IMAGES} صور للشقة",
     type=["jpg", "jpeg", "png", "webp", "heic", "heif"],
     accept_multiple_files=True
 )
@@ -2111,7 +2151,7 @@ if uploaded_files:
     if len(uploaded_files) > MAX_IMAGES:
 
         st.warning(
-            f"Maximum {MAX_IMAGES} images. You uploaded {len(uploaded_files)}."
+            f"الحد الأقصى {MAX_IMAGES} صور. لقد رفعت {len(uploaded_files)} صور."
         )
 
     else:
@@ -2128,11 +2168,11 @@ if uploaded_files:
                 failed.append(uploaded_file.name)
 
         if failed:
-            st.warning("Could not read: " + ", ".join(failed))
+            st.warning("تعذر قراءة الصور التالية: " + ", ".join(failed))
 
         if images:
 
-            st.success(f"{len(images)} photo(s) uploaded successfully.")
+            st.success(f"تم رفع {len(images)} صورة بنجاح.")
 
             items = list(images.items())
 
@@ -2157,7 +2197,7 @@ if images:
 
     st.write("")
 
-    if st.button("Start AI Analysis", type="primary", use_container_width=True):
+    if st.button("ابدأ تحليل الذكاء الاصطناعي", type="primary", use_container_width=True):
 
         loader = st.empty()
         loader.markdown(LOADER_HTML, unsafe_allow_html=True)
@@ -2241,11 +2281,11 @@ if images:
 
             if is_network_error(exc):
                 st.error(
-                    "Cannot reach Google (Gemini). Check your internet "
-                    "connection, then press Start AI Analysis again."
+                    "تعذر الاتصال بخدمة Gemini. تحقق من اتصال الإنترنت "
+                    "ثم اضغط على زر ابدأ تحليل الذكاء الاصطناعي مرة أخرى."
                 )
             else:
-                st.error(f"Analysis failed: {exc}")
+                st.error(f"فشل التحليل: {exc}")
                 st.exception(exc)
 
 
@@ -2262,7 +2302,7 @@ if "final_report" in st.session_state:
     st.divider()
 
     st.markdown(
-        '<div class="section-title">Your Apartment Listing</div>',
+        '<div class="section-title">إعلان شقتك</div>',
         unsafe_allow_html=True
     )
 
@@ -2272,7 +2312,7 @@ if "final_report" in st.session_state:
     if pdf_bytes:
 
         st.download_button(
-            "Download listing report (PDF)",
+            "تحميل تقرير الإعلان (PDF)",
             data=pdf_bytes,
             file_name="Hujrah_Listing_Report.pdf",
             mime="application/pdf",
@@ -2286,18 +2326,18 @@ if "final_report" in st.session_state:
     elif pdf_error:
 
         st.warning(
-            f"The PDF could not be created ({pdf_error}). "
-            f"If a package is missing, install it into the same Python "
-            f"that runs this app:\n\n"
+            f"تعذر إنشاء ملف PDF ({pdf_error}). "
+            f"إذا كانت هناك مكتبة ناقصة، ثبّتها في بيئة Python المستخدمة لتشغيل التطبيق "
+            f"لتشغيل التطبيق:\n\n"
             f"{sys.executable} -m pip install reportlab pillow-heif "
             f"arabic-reshaper python-bidi"
         )
 
     display_property_card(
         images=report_images,
-        listing_name=listing_info.get("name", "Apartment Listing"),
-        location=listing_info.get("location", "Location not provided"),
-        rent=listing_info.get("monthly_rent", "Not provided"),
+        listing_name=listing_info.get("name", "إعلان شقة"),
+        location=listing_info.get("location", "لم يتم تحديد الموقع"),
+        rent=listing_info.get("monthly_rent", "غير متاح"),
         rating=float(listing_info.get("demo_rating", 0)),
         occupants=int(listing_info.get("required_people", 1)),
         max_occupants=int(listing_info.get("test_capacity", 1))
@@ -2308,13 +2348,12 @@ if "final_report" in st.session_state:
     display_full_details(final_report)
 
     st.caption(
-        "Hujrah AI. AI-assisted property analysis. "
-        "All listings require owner approval."
+        "حُجرة. تحليل العقارات بمساعدة الذكاء الاصطناعي. "
+        "جميع الإعلانات تتطلب موافقة المالك."
     )
 
 else:
 
     st.info(
-        "Upload your photos and start the AI analysis to generate "
-        "your apartment listing."
+        "ارفع صور الشقة وابدأ التحليل لإنشاء إعلانك."
     )
