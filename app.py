@@ -1172,27 +1172,31 @@ def build_report_pdf(final_report, images):
     from reportlab.pdfbase.ttfonts import TTFont
     from reportlab.pdfbase.pdfmetrics import stringWidth
 
-    # ---------- Fonts (Arabic-capable if the TTF files exist) ----------
-    # Support both the recommended fonts/ folder and the repository root.
+    # ---------- Fonts (Arabic PDF support) ----------
+    # Readex Pro Arabic fonts are stored in the repository's fonts/ directory.
+    # Windows fonts are kept as a local fallback.
     reg_candidates = [
         FONT_DIR / "ReadexPro-Regular.ttf",
         BASE_DIR / "ReadexPro-Regular.ttf",
-        Path("C:/Windows/Fonts/arial.ttf"),
         Path("C:/Windows/Fonts/tahoma.ttf"),
+        Path("C:/Windows/Fonts/arial.ttf"),
     ]
     bold_candidates = [
+        FONT_DIR / "ReadexPro-Bold.ttf",
         FONT_DIR / "ReadexPro-SemiBold.ttf",
+        BASE_DIR / "ReadexPro-Bold.ttf",
         BASE_DIR / "ReadexPro-SemiBold.ttf",
-        Path("C:/Windows/Fonts/arialbd.ttf"),
         Path("C:/Windows/Fonts/tahomabd.ttf"),
+        Path("C:/Windows/Fonts/arialbd.ttf"),
     ]
-    reg = next((font_path for font_path in reg_candidates if font_path.exists()), None)
-    bold = next((font_path for font_path in bold_candidates if font_path.exists()), None)
 
-    if not reg or not bold:
+    reg = next((font_path for font_path in reg_candidates if font_path.is_file()), None)
+    bold = next((font_path for font_path in bold_candidates if font_path.is_file()), None)
+
+    if reg is None or bold is None:
         raise RuntimeError(
-            "لإنشاء تقرير PDF باللغة العربية، أضف الخطين "
-            "ReadexPro-Regular.ttf و ReadexPro-SemiBold.ttf داخل مجلد fonts."
+            "ملفات الخط العربي غير موجودة. تأكد من وجود ReadexPro-Regular.ttf "
+            "و ReadexPro-Bold.ttf أو ReadexPro-SemiBold.ttf داخل مجلد fonts."
         )
 
     try:
@@ -1200,12 +1204,17 @@ def build_report_pdf(final_report, images):
         from bidi.algorithm import get_display
     except ImportError as font_error:
         raise RuntimeError(
-            "ثبّت دعم العربية في PDF بالأمر: "
+            "ثبّت مكتبات دعم العربية في PDF بالأمر: "
             "python -m pip install arabic-reshaper python-bidi"
         ) from font_error
 
-    pdfmetrics.registerFont(TTFont("Body", str(reg)))
-    pdfmetrics.registerFont(TTFont("Body-Bold", str(bold)))
+    # Embed the selected TrueType fonts in the generated PDF.
+    pdfmetrics.registerFont(TTFont("Body", str(reg), validate=1))
+    pdfmetrics.registerFont(TTFont("Body-Bold", str(bold), validate=1))
+    pdfmetrics.registerFontFamily(
+        "Body", normal="Body", bold="Body-Bold",
+        italic="Body", boldItalic="Body-Bold"
+    )
     FONT, FONT_BOLD, UNICODE_OK = "Body", "Body-Bold", True
 
     def has_arabic(value):
@@ -1331,12 +1340,10 @@ def build_report_pdf(final_report, images):
         c.drawText(t)
 
     def wrap(value, font, size, width):
-        """Wrap in logical reading order, then shape each rendered line.
-
-        Applying bidi before line wrapping can reverse punctuation and mixed
-        Arabic/Latin text at line boundaries, so the order here is deliberate.
-        """
+        """Wrap logical text first, then shape each line for Arabic display."""
         logical_text = str(value if value is not None else "")
+        if not logical_text.strip():
+            return []
         logical_lines = simpleSplit(logical_text, font, size, width)
         return [shape(line) for line in logical_lines]
 
@@ -1801,7 +1808,7 @@ def build_report_pdf(final_report, images):
             text(tx, top - 8 * mm, room, FONT_BOLD, 11, EMERALD_900)
 
             if conf:
-                label = f"{conf} confidence"
+                label = f"مستوى الثقة: {conf}"
                 lw = stringWidth(shape(label), FONT, 7.5) + 5 * mm
                 lx = PAGE_W - MARGIN - 5 * mm - lw
                 c.setFillColor(MINT)
