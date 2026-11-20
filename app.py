@@ -1186,19 +1186,6 @@ def build_report_pdf(final_report, images):
     # arabic_reshaper outputs "Arabic Presentation Forms" (U+FB50-FDFF / U+FE70-FEFF).
     # The font MUST contain those glyphs, otherwise they render as squares.
     # Amiri / Noto Naskh Arabic (static TTF) contain them. Readex Pro usually does not.
-    reg_candidates = [
-        FONT_DIR / "Amiri-Regular.ttf",
-        FONT_DIR / "NotoNaskhArabic-Regular.ttf",
-        Path("C:/Windows/Fonts/tahoma.ttf"),
-        Path("C:/Windows/Fonts/arial.ttf"),
-    ]
-    bold_candidates = [
-        FONT_DIR / "Amiri-Bold.ttf",
-        FONT_DIR / "NotoNaskhArabic-Bold.ttf",
-        Path("C:/Windows/Fonts/tahomabd.ttf"),
-        Path("C:/Windows/Fonts/arialbd.ttf"),
-    ]
-
     # sample covers: ligature lam-alef, hamza, ta marbuta, comma, digits
     FONT_TEST_TEXT = arabic_reshaper.reshape(
         "حجرة الشقة تحليل الإيجار مُراجع بالذكاء الاصطناعي ، ؟ 0123456789"
@@ -1215,14 +1202,50 @@ def build_report_pdf(final_report, images):
             return False
         return all(ord(ch) in cmap for ch in FONT_TEST_TEXT if not ch.isspace())
 
-    reg = next((p for p in reg_candidates if p.is_file() and supports_arabic(p)), None)
-    bold = next((p for p in bold_candidates if p.is_file() and supports_arabic(p)), None)
+    def ensure_amiri():
+        """Downloads Amiri into fonts/ if it is missing (e.g. on Streamlit Cloud)."""
+        import urllib.request
+        FONT_DIR.mkdir(exist_ok=True)
+        base = "https://github.com/google/fonts/raw/main/ofl/amiri/"
+        for name in ("Amiri-Regular.ttf", "Amiri-Bold.ttf"):
+            target = FONT_DIR / name
+            if not target.is_file():
+                try:
+                    urllib.request.urlretrieve(base + name, str(target))
+                except Exception:
+                    pass
+
+    def candidates(is_bold):
+        suffix = "Bold" if is_bold else "Regular"
+        found = [
+            FONT_DIR / f"Amiri-{suffix}.ttf",
+            FONT_DIR / f"NotoNaskhArabic-{suffix}.ttf",
+        ]
+        if FONT_DIR.is_dir():
+            found += sorted(FONT_DIR.glob(f"**/*{suffix}*.ttf"))
+        found += [
+            Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if is_bold
+                 else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+            Path("C:/Windows/Fonts/tahomabd.ttf" if is_bold else "C:/Windows/Fonts/tahoma.ttf"),
+            Path("C:/Windows/Fonts/arialbd.ttf" if is_bold else "C:/Windows/Fonts/arial.ttf"),
+        ]
+        return found
+
+    def pick(is_bold):
+        return next((p for p in candidates(is_bold) if p.is_file() and supports_arabic(p)), None)
+
+    reg, bold = pick(False), pick(True)
 
     if reg is None or bold is None:
+        ensure_amiri()
+        reg, bold = pick(False), pick(True)
+
+    if reg is None or bold is None:
+        existing = [p.name for p in FONT_DIR.glob("**/*.ttf")] if FONT_DIR.is_dir() else []
         raise RuntimeError(
-            "لم يتم العثور على خط عربي يدعم Presentation Forms. "
-            "ضع Amiri-Regular.ttf و Amiri-Bold.ttf "
-            "(أو NotoNaskhArabic-Regular.ttf و NotoNaskhArabic-Bold.ttf) داخل مجلد fonts."
+            "لا يوجد خط عربي صالح. الملفات الموجودة في fonts: "
+            + (", ".join(existing) or "لا شيء")
+            + ". ارفع Amiri-Regular.ttf و Amiri-Bold.ttf (static TTF) إلى مجلد fonts في الريبو."
         )
 
     pdfmetrics.registerFont(TTFont("Body", str(reg), validate=1))
